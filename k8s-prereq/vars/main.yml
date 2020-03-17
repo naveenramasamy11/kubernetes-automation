@@ -1,0 +1,10 @@
+---
+# vars file for k8s
+necessary_packages:
+- kubelet
+- kubeadm
+- kubectl
+- docker
+services:
+- kubelet
+- docker

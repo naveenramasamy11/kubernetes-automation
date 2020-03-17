@@ -1,0 +1,61 @@
+---
+# tasks file for k8s
+- name: Enable a RHSM repository
+  rhsm_repository: 
+    name: rhel-7-server-extras-rpms
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
+- name: Add kubernetes repository
+  yum_repository:
+    name: Kubernetes
+    description: Adding Kubernetes repositories
+    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+    gpgcheck: yes
+    enabled: true
+    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+    repo_gpgcheck: yes
+
+- name: Disable Firewall if running
+  service:
+    name: firewalld
+    state: stopped
+    enabled: false
+  when: ansible_os_family == 'RedHat'
+
+
+- name: Install docker, kubeadm, and kubectl
+  package:
+    name: "{{item}}"
+    state: present
+  loop:
+  - "{{necessary_packages}}"
+  notify: start service
+
+- name: Remove any host file and re-add them.
+  file:
+    path: /etc/hosts
+    state: '{{ item }}'
+    force: yes
+  with_items:
+  - absent
+  - touch
+
+- name: Add IP address of all hosts to all hosts
+  lineinfile:
+    dest: /etc/hosts
+    line: "{{ hostvars[item].ansible_host }} {{ hostvars[item].inventory_hostname }} {{ hostvars[item].inventory_hostname_short }}"
+    state: present
+  with_items: "{{ groups.all }}"
+  ignore_errors: yes
+
+- name: Disable swap.
+  command: swapoff -a
+
+- name: start service
+  service: 
+    name: "{{item}}"
+    state: started
+    enabled: yes
+  with_items:
+  - "{{services}}"

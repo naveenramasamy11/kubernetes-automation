@@ -1,0 +1,9 @@
+---
+# handlers file for k8s
+- name: start service
+  service: 
+    name: "{{item}}"
+    state: started
+    enabled: yes
+  with_items:
+  - "{{services}}"

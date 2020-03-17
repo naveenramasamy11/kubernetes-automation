@@ -1,0 +1,21 @@
+---
+- name: set master host to perform the join command.
+  set_fact: 
+    master: "{{ groups['masters'][0] }}"
+
+- name: Get the kubeadm join command from the Kubernetes master.
+  command: kubeadm token create --print-join-command
+  changed_when: false
+  register: kubernetes_join_command_result
+  run_once: true
+  delegate_to: "{{ master }}"
+  no_log: true
+
+- set_fact:
+    join: "{{ kubernetes_join_command_result.stdout }}"
+
+- name: join 
+  command: "{{ join }}"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['workers'] }}"
+

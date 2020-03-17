@@ -1,0 +1,21 @@
+---
+# tasks file for k8s
+- name: Initialize Kubernetes Master with kubeadm init
+  command: kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address={{ kubernetes_apiserver_advertise_address | default(ansible_default_ipv4.address, true) }} 
+  register: kubeadm_initialize
+  run_once: true
+
+- name: Ensure .kube directory exists.
+  file:
+    path: ~/.kube
+    state: directory
+
+- name: Symlink the kubectl admin.conf to ~/.kube/conf.
+  file:
+    src: /etc/kubernetes/admin.conf
+    dest: ~/.kube/config
+    state: link
+
+- name: 'Use Calico to get the config in yaml. And this should be run only on Master node'
+  command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+  ignore_errors: true

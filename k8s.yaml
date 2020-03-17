@@ -1,0 +1,13 @@
+---
+- hosts: all
+  roles: 
+  - k8s-prereq
+
+- hosts: masters[0]
+  roles:
+  - k8s
+
+- hosts: all
+  gather_facts: false
+  roles:
+  - k8s-node-joining
