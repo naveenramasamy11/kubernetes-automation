@@ -23,6 +23,17 @@
     enabled: false
   when: ansible_os_family == 'RedHat'
 
+- name: Disable SELinux
+  selinux:
+    state: disabled
+
+- name: update kernel settings
+  sysctl:
+    name: net.bridge.bridge-nf-call-iptables
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
 
 - name: Install docker, kubeadm, and kubectl
   package:
