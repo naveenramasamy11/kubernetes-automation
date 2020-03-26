@@ -1,9 +1,10 @@
 ---
 # tasks file for k8s
+- debug: var=ansible_distribution
 - name: Enable a RHSM repository
   rhsm_repository: 
     name: rhel-7-server-extras-rpms
-  when: ansible_os_family == 'RedHat'
+  when: ansible_distribution == 'RedHat'
   ignore_errors: true
 
 - name: Add kubernetes repository
@@ -22,6 +23,7 @@
     state: stopped
     enabled: false
   when: ansible_os_family == 'RedHat'
+  ignore_errors: true
 
 - name: Disable SELinux
   selinux:
@@ -34,7 +36,8 @@
     sysctl_set: yes
     state: present
     reload: yes
-
+  ignore_errors: true
+  
 - name: Install docker, kubeadm, and kubectl
   package:
     name: "{{item}}"

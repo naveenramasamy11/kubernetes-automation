@@ -13,9 +13,11 @@
 
 - set_fact:
     join: "{{ kubernetes_join_command_result.stdout }}"
+  no_log: true
 
 - name: join 
   command: "{{ join }}"
   delegate_to: "{{ item }}"
   loop: "{{ groups['workers'] }}"
+  run_once: true
 
