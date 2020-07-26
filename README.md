@@ -1,5 +1,5 @@
 # kubernetes-automation
-The complete solution to build a k8s environment in an automated fashion on a CentOS/RedHat based operating systems.
+The complete solution to build a k8s environment in an automated fashion on a CentOS/RedHat based operating systems. 
 
 
 ### How will your main playbook looks.
@@ -44,13 +44,13 @@ all:
 ```ansible-playbook -i inventory.yaml k8s.yaml
 ```
 
-
 ### TO DOs
 
-Want to contribute or find a Bug? Great!
+```Want to contribute or find a Bug? Great!
 
-Please create a PR.
+Feel free to create a PR.
+```
 
 ### Author
-
-Naveen Ramasamy, An Infra Automation Engineer.
+```Naveen Ramasamy, An Infra Automation Engineer.
+```
