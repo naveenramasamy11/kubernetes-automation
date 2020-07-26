@@ -41,7 +41,8 @@ all:
 
 ### How do we run the playbook
 
-```ansible-playbook -i inventory.yaml k8s.yaml
+```
+ansible-playbook -i inventory.yaml k8s.yaml
 ```
 
 ### TO DOs
