@@ -48,10 +48,10 @@ ansible-playbook -i inventory.yaml k8s.yaml
 ### TO DOs
 
 ```Want to contribute or find a Bug? Great!
-
 Feel free to create a PR.
 ```
 
 ### Author
-```Naveen Ramasamy, An Infra Automation Engineer.
+```
+Naveen Ramasamy, An Infra Automation Engineer.
 ```
