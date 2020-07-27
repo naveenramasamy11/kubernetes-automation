@@ -19,7 +19,7 @@ The complete solution to build a k8s environment in an automated fashion on a Ce
   - k8s-node-joining
 ```
 
-### Lets get a sample inventory you can make use of
+### A blueprint of the inventory that you can use.
 
 ```---
 all:
