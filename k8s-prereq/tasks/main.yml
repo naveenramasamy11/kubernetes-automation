@@ -1,6 +1,5 @@
 ---
 # tasks file for k8s
-- debug: var=ansible_distribution
 - name: Enable a RHSM repository
   rhsm_repository: 
     name: rhel-7-server-extras-rpms
@@ -16,6 +15,7 @@
     enabled: true
     gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
     repo_gpgcheck: yes
+  when: ansible_pkg_mgr == 'yum'
 
 - name: Disable Firewall if running
   service:
@@ -28,6 +28,7 @@
 - name: Disable SELinux
   selinux:
     state: disabled
+  when: ansible_selinux.mode == 'enforcing'
 
 - name: update kernel settings
   sysctl:
@@ -41,8 +42,8 @@
 - name: Install docker, kubeadm, and kubectl
   package:
     name: "{{item}}"
-    state: present
-  loop:
+    state: installed
+  with_items:
   - "{{necessary_packages}}"
   notify: start service
 
