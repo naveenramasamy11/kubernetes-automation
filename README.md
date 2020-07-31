@@ -27,13 +27,13 @@ all:
     masters:
         hosts:
           kube-master-1:
-            ansible_host: 104.211.8.100
+            ansible_host: 192.168.0.10
     workers:
         hosts:
           kube-worker-1:
-            ansible_host: 104.211.8.100
+            ansible_host: 192.168.0.11
           kube-worker-2:
-            ansible_host: 104.211.8.100
+            ansible_host: 192.168.0.12
   vars:
     ansible_ssh_user: username
     ansible_become: yes
