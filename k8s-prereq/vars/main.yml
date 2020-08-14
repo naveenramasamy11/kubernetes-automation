@@ -6,5 +6,4 @@ necessary_packages:
 - kubectl
 - docker
 services:
-- kubelet
 - docker
