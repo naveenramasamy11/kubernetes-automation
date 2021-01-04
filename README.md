@@ -1,5 +1,5 @@
 # kubernetes-automation
-The complete solution to build a k8s environment in an automated fashion on a CentOS/RedHat based operating systems. 
+The complete solution to build a k8s environment in an automated fashion on a Debian/Ubuntu based operating systems. 
 
 
 ### How will your main playbook looks.
