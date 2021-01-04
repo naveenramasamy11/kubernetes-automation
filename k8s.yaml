@@ -1,13 +1,20 @@
 ---
 - hosts: all
+  become: True
   roles: 
   - k8s-prereq
+  tags:
+  - masters
 
 - hosts: masters[0]
+  become: True
   roles:
   - k8s
+  tags:
+  - masters
 
 - hosts: all
+  become: True
   gather_facts: false
   roles:
   - k8s-node-joining

@@ -4,15 +4,20 @@ all:
     masters:
         hosts:
           kube-master-1:
-            ansible_host: 192.168.x.x
+            ansible_host: 192.168.0.106
+        vars:
+          ansible_ssh_user: ubuntu
+          ansible_become: yes
+          ansible_python_interpreter: python3
     workers:
         hosts:
           kube-worker-1:
-            ansible_host: 192.168.x.x
+            ansible_host: 192.168.0.110
           kube-worker-2:
-            ansible_host: 192.168.x.x
-  vars:
-    ansible_ssh_user: vagrant
-    ansible_become: yes
+            ansible_host: 192.168.0.111
+        vars:
+          ansible_ssh_user: vagrant
+          ansible_become: yes
+          ansible_python_interpreter: python3
 
       

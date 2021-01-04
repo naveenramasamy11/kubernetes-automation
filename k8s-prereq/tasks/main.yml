@@ -1,12 +1,6 @@
 ---
 # tasks file for k8s
-- name: Enable a RHSM repository
-  rhsm_repository: 
-    name: rhel-7-server-extras-rpms
-  when: ansible_distribution == 'RedHat'
-  ignore_errors: true
-
-- name: Add kubernetes repository
+- name: Add kubernetes repository if OS family is redhat.
   yum_repository:
     name: Kubernetes
     description: Adding Kubernetes repositories
@@ -17,6 +11,28 @@
     repo_gpgcheck: yes
   when: ansible_pkg_mgr == 'yum'
 
+- name: Add an Apt signing key and repository if OS Family is Debian
+  block:
+  - apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+    become: true
+
+  - name: Add the Repository
+    apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+      codename: focal
+    become: true
+
+  - name: Install docker package if Debian based family
+    package:
+      name: docker.io
+      state: present
+    notify: start service
+  become: true
+  when: ansible_os_family == 'Debian'
+
 - name: Disable Firewall if running
   service:
     name: firewalld
@@ -25,10 +41,12 @@
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
-- name: Disable SELinux
+- name: Disable SELinux if OS family is redhat.
   selinux:
     state: disabled
-  when: ansible_selinux.mode == 'enforcing'
+  when: 
+  - ansible_os_family == 'RedHat'
+  - ansible_selinux.mode == 'enforcing'
 
 - name: update kernel settings
   sysctl:
@@ -39,38 +57,31 @@
     reload: yes
   ignore_errors: true
   
-- name: Install docker, kubeadm, and kubectl
+- name: Install docker package if RedHat Based family
   package:
-    name: "{{item}}"
-    state: installed
-  with_items:
-  - "{{necessary_packages}}"
+    name:
+    - docker
+    state: present
   notify: start service
+  when: 
+  - ansible_os_family == 'RedHat'
+  become: yes
 
-- name: Remove any host file and re-add them.
-  file:
-    path: /etc/hosts
-    state: '{{ item }}'
-    force: yes
-  with_items:
-  - absent
-  - touch
+- name: Install kubernetes Packages
+  package:
+    name: "{{ necessary_packages }}"
+    state: present
+  notify: start service
 
 - name: Add IP address of all hosts to all hosts
   lineinfile:
     dest: /etc/hosts
     line: "{{ hostvars[item].ansible_host }} {{ hostvars[item].inventory_hostname }} {{ hostvars[item].inventory_hostname_short }}"
     state: present
+    insertafter: EOF
   with_items: "{{ groups.all }}"
   ignore_errors: yes
 
 - name: Disable swap.
   command: swapoff -a
 
-- name: start service
-  service: 
-    name: "{{item}}"
-    state: started
-    enabled: yes
-  with_items:
-  - "{{services}}"

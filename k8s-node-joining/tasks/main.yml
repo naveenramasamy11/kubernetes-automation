@@ -9,10 +9,13 @@
   register: kubernetes_join_command_result
   run_once: true
   delegate_to: "{{ master }}"
-  no_log: true
+ # no_log: true
+  become: true
 
+- debug: var=kubernetes_join_command_result.stdout
+#- meta: end_play
 - set_fact:
-    join: "{{ kubernetes_join_command_result.stdout }}"
+    join: "{{kubernetes_join_command_result.stdout}}"
   no_log: true
 
 - name: join 
@@ -20,4 +23,5 @@
   delegate_to: "{{ item }}"
   loop: "{{ groups['workers'] }}"
   run_once: true
+  become: true
 
