@@ -1,23 +1,41 @@
+# tasks file for k8s-prereq - System preparation for Kubernetes
 ---
-# tasks file for k8s
-- name: Enable a RHSM repository
-  rhsm_repository: 
-    name: rhel-7-server-extras-rpms
-  when: ansible_distribution == 'RedHat'
-  ignore_errors: true
 
-- name: Add kubernetes repository
+- name: Add Kubernetes YUM repository (RedHat family).
   yum_repository:
     name: Kubernetes
-    description: Adding Kubernetes repositories
+    description: Kubernetes repository
     baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
     gpgcheck: yes
     enabled: true
-    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+    gpgkey: >
+      https://packages.cloud.google.com/yum/doc/yum-key.gpg
+      https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
     repo_gpgcheck: yes
   when: ansible_pkg_mgr == 'yum'
 
-- name: Disable Firewall if running
+- name: Add Kubernetes APT signing key and repository (Debian family).
+  block:
+    - name: Add APT signing key.
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes APT repository.
+      apt_repository:
+        repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+        codename: focal
+
+    - name: Install Docker (Debian family).
+      package:
+        name: docker.io
+        state: present
+      notify: start service
+  become: true
+  when: ansible_os_family == 'Debian'
+
+- name: Disable firewalld (RedHat family).
   service:
     name: firewalld
     state: stopped
@@ -25,12 +43,14 @@
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
-- name: Disable SELinux
+- name: Disable SELinux if enforcing (RedHat family).
   selinux:
     state: disabled
-  when: ansible_selinux.mode == 'enforcing'
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_selinux.mode == 'enforcing'
 
-- name: update kernel settings
+- name: Enable bridge netfilter for iptables (required for Kubernetes networking).
   sysctl:
     name: net.bridge.bridge-nf-call-iptables
     value: 1
@@ -38,39 +58,51 @@
     state: present
     reload: yes
   ignore_errors: true
-  
-- name: Install docker, kubeadm, and kubectl
+
+- name: Load br_netfilter kernel module.
+  modprobe:
+    name: br_netfilter
+    state: present
+  ignore_errors: true
+
+- name: Install Docker (RedHat family).
   package:
-    name: "{{item}}"
-    state: installed
-  with_items:
-  - "{{necessary_packages}}"
+    name: docker
+    state: present
+  notify: start service
+  when: ansible_os_family == 'RedHat'
+  become: yes
+
+- name: Install Kubernetes packages.
+  package:
+    name: "{{ necessary_packages }}"
+    state: present
   notify: start service
 
-- name: Remove any host file and re-add them.
-  file:
-    path: /etc/hosts
-    state: '{{ item }}'
-    force: yes
-  with_items:
-  - absent
-  - touch
-
-- name: Add IP address of all hosts to all hosts
+- name: Populate /etc/hosts with all inventory hosts.
   lineinfile:
     dest: /etc/hosts
-    line: "{{ hostvars[item].ansible_host }} {{ hostvars[item].inventory_hostname }} {{ hostvars[item].inventory_hostname_short }}"
+    # FIX: Use inventory_hostname (not inventory_hostname_short) which may be unreliable
+    line: "{{ hostvars[item].ansible_host }} {{ hostvars[item].inventory_hostname }}"
     state: present
-  with_items: "{{ groups.all }}"
+    insertafter: EOF
+  # FIX: Replaced deprecated 'with_items' with modern 'loop' syntax.
+  loop: "{{ groups['all'] }}"
   ignore_errors: yes
+
+# FIX: Added idempotency — only run swapoff if swap is currently active.
+- name: Check if swap is currently active.
+  command: swapon --summary
+  register: swap_summary
+  changed_when: false
 
 - name: Disable swap.
   command: swapoff -a
+  when: swap_summary.stdout != ""
 
-- name: start service
-  service: 
-    name: "{{item}}"
-    state: started
-    enabled: yes
-  with_items:
-  - "{{services}}"
+# FIX: Ensure swap is disabled permanently across reboots by commenting it out in /etc/fstab.
+- name: Disable swap permanently in /etc/fstab.
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'

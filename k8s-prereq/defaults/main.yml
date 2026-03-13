@@ -1,0 +1,14 @@
+# FIX: Using defaults/main.yml instead of vars/main.yml.
+# defaults/ has the lowest variable precedence, meaning group_vars, host_vars,
+# or -e flags can all override these values without touching the role.
+---
+
+necessary_packages:
+  - kubelet
+  - kubeadm
+  - kubectl
+  - kubernetes-cni
+
+services:
+  - docker
+  - kubelet

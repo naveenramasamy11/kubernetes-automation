@@ -1,23 +1,46 @@
+# tasks file for k8s - Kubernetes control plane initialization
 ---
-# tasks file for k8s
+
+# FIX: Idempotency guard — skip kubeadm init if cluster is already initialized.
+- name: Check if Kubernetes has already been initialized.
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: kubeadm_conf
+
 - name: Initialize Kubernetes Master with kubeadm init
-  command: kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address={{ ansible_host }} #{{ kubernetes_apiserver_advertise_address | default(ansible_default_ipv4.address, true) }} 
+  command: >
+    kubeadm init
+    --pod-network-cidr={{ pod_network_cidr }}
+    --apiserver-advertise-address={{ ansible_host }}
   register: kubeadm_initialize
+  # FIX: Removed incorrect 'with_items' on a single-item run_once task.
+  # run_once is sufficient here.
   run_once: true
-  with_items:
-  - "{{ groups['masters'][0] }}"
+  # FIX: Only run if cluster is not already initialized (idempotency).
+  when: not kubeadm_conf.stat.exists
+  become: true
 
 - name: Ensure .kube directory exists.
   file:
-    path: ~/.kube
+    path: "~/.kube"
     state: directory
+    mode: "0755"
+  become: true
 
-- name: Symlink the kubectl admin.conf to ~/.kube/conf.
+- name: Symlink the kubectl admin.conf to ~/.kube/config.
   file:
     src: /etc/kubernetes/admin.conf
     dest: ~/.kube/config
     state: link
+  # FIX: Only create symlink if admin.conf exists.
+  when: kubeadm_conf.stat.exists or (kubeadm_initialize is defined and kubeadm_initialize.changed)
+  become: true
 
-- name: 'Use Calico Plugin to get the config in yaml. And this should be run only on Master node'
-  command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
-
+# FIX: Use a pinned, versioned Calico manifest instead of the floating 'latest' URL.
+# Update calico_version in defaults/main.yml to change the CNI version.
+- name: Apply Calico CNI plugin manifest.
+  command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
+  register: calico_result
+  changed_when: "'created' in calico_result.stdout or 'configured' in calico_result.stdout"
+  run_once: true
+  become: true

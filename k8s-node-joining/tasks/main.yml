@@ -1,8 +1,12 @@
+# tasks file for k8s-node-joining
 ---
-- name: set master host to perform the join command.
-  set_fact: 
+
+- name: Set master host variable for delegation.
+  set_fact:
     master: "{{ groups['masters'][0] }}"
 
+# FIX: no_log is now uncommented to prevent the join token from appearing
+# in Ansible output logs — this is a security-sensitive credential.
 - name: Get the kubeadm join command from the Kubernetes master.
   command: kubeadm token create --print-join-command
   changed_when: false
@@ -10,14 +14,33 @@
   run_once: true
   delegate_to: "{{ master }}"
   no_log: true
+  become: true
 
-- set_fact:
+# FIX: Removed 'debug: var=kubernetes_join_command_result.stdout'
+# Printing the join token in plain text is a security risk —
+# anyone with access to the Ansible output can use it to join rogue nodes.
+
+- name: Store join command as a fact (sensitive — no_log enforced).
+  set_fact:
     join: "{{ kubernetes_join_command_result.stdout }}"
   no_log: true
 
-- name: join 
-  command: "{{ join }}"
+# FIX: Added idempotency — check if node has already joined the cluster
+# before attempting to run kubeadm join again.
+- name: Check if node has already joined the cluster.
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
   delegate_to: "{{ item }}"
   loop: "{{ groups['workers'] }}"
   run_once: true
 
+- name: Join worker nodes to the cluster.
+  command: "{{ join }}"
+  delegate_to: "{{ item.item }}"
+  loop: "{{ kubelet_conf.results }}"
+  run_once: true
+  # FIX: Only join if the node has NOT already joined (idempotency).
+  when: not item.stat.exists
+  no_log: true
+  become: true

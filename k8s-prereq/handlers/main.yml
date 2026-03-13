@@ -1,9 +1,11 @@
+# handlers file for k8s-prereq
 ---
-# handlers file for k8s
+
+# FIX: Replaced deprecated 'with_items' with modern 'loop' syntax.
 - name: start service
-  service: 
-    name: "{{item}}"
+  service:
+    name: "{{ item }}"
     state: started
     enabled: yes
-  with_items:
-  - "{{services}}"
+  loop: "{{ services }}"
+  become: true

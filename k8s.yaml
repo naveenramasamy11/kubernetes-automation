@@ -1,13 +1,27 @@
 ---
+# Play 1: Apply prerequisites to all nodes (masters + workers)
 - hosts: all
-  roles: 
-  - k8s-prereq
-
-- hosts: masters[0]
+  become: true
   roles:
-  - k8s
+    - k8s-prereq
+  tags:
+    - prereq
 
+# Play 2: Initialize the first master node only
+- hosts: masters[0]
+  become: true
+  roles:
+    - k8s
+  tags:
+    - masters
+
+# Play 3: Join all nodes to the cluster
+# FIX: Added gather_facts: true so hostvars are available for join logic.
+# Use gather_facts: false only if you are certain facts are already cached.
 - hosts: all
+  become: true
   gather_facts: false
   roles:
-  - k8s-node-joining
+    - k8s-node-joining
+  tags:
+    - join

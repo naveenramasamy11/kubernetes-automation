@@ -1,0 +1,14 @@
+# FIX: Moved from vars/main.yml to defaults/main.yml so these can be
+# overridden by group_vars, host_vars, or at the command line.
+# vars/main.yml has high precedence and cannot be easily overridden.
+---
+
+# Pod network CIDR — must not overlap with your host/node network.
+# Common values: 10.244.0.0/16 (Flannel), 192.168.0.0/16 (Calico default)
+# FIX: Changed from hardcoded 192.168.0.0/16 to 10.244.0.0/16 to avoid
+# conflict with typical home/lab host networks.
+pod_network_cidr: "10.244.0.0/16"
+
+# Calico CNI version to install. Pin this to a specific release.
+# Check latest: https://github.com/projectcalico/calico/releases
+calico_version: "v3.27.3"

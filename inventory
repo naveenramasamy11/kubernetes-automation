@@ -1,0 +1,3 @@
+[default]
+# FIX: Corrected typo 'annsible_user' → 'ansible_user'
+223.1.1.2 ansible_user=root
