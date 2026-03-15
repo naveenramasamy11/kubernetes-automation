@@ -1,3 +1,4 @@
+---
 all:
   children:
     masters:
@@ -6,7 +7,7 @@ all:
           ansible_host: 192.168.0.106
       vars:
         ansible_ssh_user: ubuntu
-        ansible_become: yes
+        ansible_become: true
         ansible_python_interpreter: python3
     workers:
       hosts:
@@ -18,5 +19,5 @@ all:
         # FIX: Use a consistent user across nodes (avoid mixed ubuntu/vagrant).
         # Override per-host if needed using host_vars/.
         ansible_ssh_user: ubuntu
-        ansible_become: yes
+        ansible_become: true
         ansible_python_interpreter: python3
