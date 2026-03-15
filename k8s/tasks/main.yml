@@ -1,5 +1,5 @@
-# tasks file for k8s - Kubernetes control plane initialization
 ---
+# tasks file for k8s - Kubernetes control plane initialization
 
 # FIX: Idempotency guard — skip kubeadm init if cluster is already initialized.
 - name: Check if Kubernetes has already been initialized.
@@ -13,10 +13,7 @@
     --pod-network-cidr={{ pod_network_cidr }}
     --apiserver-advertise-address={{ ansible_host }}
   register: kubeadm_initialize
-  # FIX: Removed incorrect 'with_items' on a single-item run_once task.
-  # run_once is sufficient here.
   run_once: true
-  # FIX: Only run if cluster is not already initialized (idempotency).
   when: not kubeadm_conf.stat.exists
   become: true
 
@@ -32,7 +29,6 @@
     src: /etc/kubernetes/admin.conf
     dest: ~/.kube/config
     state: link
-  # FIX: Only create symlink if admin.conf exists.
   when: kubeadm_conf.stat.exists or (kubeadm_initialize is defined and kubeadm_initialize.changed)
   become: true
 
