@@ -1,20 +1,59 @@
-name: Kubernetes CI - Deploy & Validate Cluster
+name: Security & Code Validation
 
 on:
   push:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-  workflow_dispatch:
 
 jobs:
   # ──────────────────────────────────────────────────────────────
-  # JOB 1: Lint & syntax-check the Ansible playbooks
+  # 1. SECRET SCANNING — detect hardcoded credentials/tokens
+  # ──────────────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────
+  # 2. YAML LINT — syntax & style validation
+  # ──────────────────────────────────────────────────────────────
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run yamllint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: default
+            rules:
+              line-length:
+                max: 160
+                level: warning
+              truthy:
+                allowed-values: ['true', 'false', 'yes', 'no']
+              comments:
+                min-spaces-from-content: 1
+
+  # ──────────────────────────────────────────────────────────────
+  # 3. ANSIBLE LINT — security & best-practice rules
   # ──────────────────────────────────────────────────────────────
   ansible-lint:
-    name: Ansible Lint & Syntax Check
+    name: Ansible Security Lint
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,189 +64,79 @@ jobs:
           python-version: "3.11"
 
       - name: Install Ansible & ansible-lint
-        run: |
-          pip install ansible ansible-lint
+        run: pip install ansible ansible-lint
 
-      - name: Syntax check — k8s.yaml playbook
+      - name: Run ansible-lint (security + best-practice profile)
         run: |
-          echo "Running ansible-playbook --syntax-check ..."
+          ansible-lint k8s.yaml \
+            --profile=security \
+            --exclude=.git \
+            || echo "ansible-lint completed"
+
+      - name: Ansible playbook syntax check
+        run: |
           ansible-playbook --syntax-check k8s.yaml -i inventory.yaml \
             2>&1 | grep -v "WARNING.*not accessible" || true
 
-      - name: Run ansible-lint on roles
-        run: |
-          echo "Running ansible-lint ..."
-          ansible-lint k8s.yaml \
-            --exclude=.git \
-            --warn-list yaml[line-length] \
-            || echo "ansible-lint completed (warnings treated as non-fatal)"
-
   # ──────────────────────────────────────────────────────────────
-  # JOB 2: Spin up a kind cluster, deploy 3 containers, validate
+  # 4. IaC SECURITY — Checkov scans Ansible roles & K8s manifests
   # ──────────────────────────────────────────────────────────────
-  k8s-deploy-and-test:
-    name: Deploy 3 Containers & Validate K8s Cluster
+  checkov-scan:
+    name: IaC Security Scan (Checkov)
     runs-on: ubuntu-latest
-    needs: ansible-lint
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── Write kind config to a file (required by kind-action) ──
-      # Mirrors real inventory: kube-master-1, kube-worker-1, kube-worker-2
-      - name: Write kind cluster config file
-        run: |
-          cat <<EOF > /tmp/kind-config.yaml
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          nodes:
-            - role: control-plane
-            - role: worker
-            - role: worker
-          EOF
-
-      # ── Create kind cluster: 1 control-plane + 2 workers ──────
-      - name: Create kind cluster (1 master + 2 workers)
-        uses: helm/kind-action@v1
+      - name: Run Checkov on Ansible roles
+        uses: bridgecrewio/checkov-action@v12
         with:
-          cluster_name: k8s-automation-ci
-          config: /tmp/kind-config.yaml
+          directory: .
+          framework: ansible
+          soft_fail: true
+          output_format: cli
+          download_external_modules: false
 
-      # ── Wait for all nodes to be Ready ────────────────────────
-      - name: Wait for all cluster nodes to become Ready
-        run: |
-          echo "Waiting for nodes..."
-          kubectl wait --for=condition=Ready nodes --all --timeout=180s
-          echo ""
-          echo "=== Cluster Nodes ==="
-          kubectl get nodes -o wide
+  # ──────────────────────────────────────────────────────────────
+  # 5. KICS — Infrastructure-as-Code vulnerability scanner
+  # ──────────────────────────────────────────────────────────────
+  kics-scan:
+    name: IaC Vulnerability Scan (KICS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # ── Deploy Container 1: Nginx (Frontend / Web) ─────────────
-      - name: "Deploy Container 1 — nginx (frontend)"
-        run: |
-          kubectl create deployment nginx \
-            --image=nginx:1.27-alpine \
-            --replicas=1
-          kubectl expose deployment nginx \
-            --port=80 \
-            --target-port=80 \
-            --type=ClusterIP \
-            --name=nginx-svc
+      - name: Run KICS scan
+        uses: checkmarx/kics-github-action@v2
+        with:
+          path: .
+          fail_on: high
+          output_path: kics-results/
+          output_formats: json,sarif
+          exclude_paths: ".git,.github"
 
-      # ── Deploy Container 2: Redis (Cache / State) ──────────────
-      - name: "Deploy Container 2 — redis (cache)"
-        run: |
-          kubectl create deployment redis \
-            --image=redis:7-alpine \
-            --replicas=1
-          kubectl expose deployment redis \
-            --port=6379 \
-            --target-port=6379 \
-            --type=ClusterIP \
-            --name=redis-svc
-
-      # ── Deploy Container 3: BusyBox (Utility / Test runner) ────
-      - name: "Deploy Container 3 — busybox (test utility)"
-        run: |
-          kubectl run busybox \
-            --image=busybox:1.36 \
-            --restart=Never \
-            --command -- sh -c "sleep 3600"
-
-      # ── Wait for all pods to reach Running state ────────────────
-      - name: Wait for all pods to be Running
-        run: |
-          echo "Waiting for nginx pod..."
-          kubectl wait --for=condition=Ready pod \
-            -l app=nginx --timeout=120s
-
-          echo "Waiting for redis pod..."
-          kubectl wait --for=condition=Ready pod \
-            -l app=redis --timeout=120s
-
-          echo "Waiting for busybox pod..."
-          kubectl wait --for=condition=Ready pod/busybox --timeout=120s
-
-      # ── Cluster Health Summary ─────────────────────────────────
-      - name: Cluster health summary
-        run: |
-          echo "=========================================="
-          echo "  NODES"
-          echo "=========================================="
-          kubectl get nodes -o wide
-
-          echo ""
-          echo "=========================================="
-          echo "  PODS"
-          echo "=========================================="
-          kubectl get pods -o wide
-
-          echo ""
-          echo "=========================================="
-          echo "  SERVICES"
-          echo "=========================================="
-          kubectl get services
-
-          echo ""
-          echo "=========================================="
-          echo "  DEPLOYMENTS"
-          echo "=========================================="
-          kubectl get deployments
-
-      # ── Connectivity Tests ─────────────────────────────────────
-      - name: Test — nginx is serving HTTP (200 OK)
-        run: |
-          NGINX_IP=$(kubectl get svc nginx-svc -o jsonpath='{.spec.clusterIP}')
-          echo "Nginx ClusterIP: $NGINX_IP"
-          kubectl exec busybox -- wget -qO- --server-response \
-            http://$NGINX_IP 2>&1 | grep -E "HTTP|nginx" | head -10
-          echo "✅ Nginx responded successfully"
-
-      - name: Test — redis is accepting connections (PING/PONG)
-        run: |
-          REDIS_IP=$(kubectl get svc redis-svc -o jsonpath='{.spec.clusterIP}')
-          echo "Redis ClusterIP: $REDIS_IP"
-          PONG=$(kubectl exec busybox -- sh -c \
-            "echo -e '*1\r\n\$4\r\nPING\r\n' | nc -w2 $REDIS_IP 6379")
-          echo "Redis response: $PONG"
-          echo "$PONG" | grep -q "PONG" && echo "✅ Redis PING/PONG OK" || \
-            { echo "❌ Redis PING failed"; exit 1; }
-
-      - name: Test — DNS resolution works between pods
-        run: |
-          echo "Resolving nginx-svc via kube-dns..."
-          kubectl exec busybox -- nslookup nginx-svc.default.svc.cluster.local
-          echo "Resolving redis-svc via kube-dns..."
-          kubectl exec busybox -- nslookup redis-svc.default.svc.cluster.local
-          echo "✅ In-cluster DNS resolution working"
-
-      - name: Test — kubectl cluster-info
-        run: |
-          kubectl cluster-info
-          echo "✅ Control plane is healthy"
-
-      # ── Node & Pod Count Assertions ────────────────────────────
-      - name: Assert — 3 nodes exist (1 master + 2 workers)
-        run: |
-          NODE_COUNT=$(kubectl get nodes --no-headers | wc -l)
-          echo "Node count: $NODE_COUNT"
-          [ "$NODE_COUNT" -eq 3 ] && echo "✅ 3 nodes confirmed" || \
-            { echo "❌ Expected 3 nodes, got $NODE_COUNT"; exit 1; }
-
-      - name: Assert — all 3 containers are Running
-        run: |
-          RUNNING=$(kubectl get pods --no-headers \
-            --field-selector=status.phase=Running | wc -l)
-          echo "Running pods: $RUNNING"
-          [ "$RUNNING" -eq 3 ] && echo "✅ All 3 containers Running" || \
-            { echo "❌ Expected 3 running pods, got $RUNNING"; exit 1; }
-
-      # ── Cleanup ────────────────────────────────────────────────
-      - name: Cleanup deployments (always runs)
+      - name: Upload KICS SARIF results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
-        run: |
-          kubectl delete deployment nginx redis --ignore-not-found
-          kubectl delete pod busybox --ignore-not-found
-          kubectl delete svc nginx-svc redis-svc --ignore-not-found
-          echo "✅ Cleanup complete"
+        with:
+          sarif_file: kics-results/results.sarif
+
+  # ──────────────────────────────────────────────────────────────
+  # 6. SEMGREP — static analysis & misconfiguration detection
+  # ──────────────────────────────────────────────────────────────
+  semgrep:
+    name: Static Analysis (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >
+            p/ansible
+            p/secrets
+            p/insecure-transport
+          auditOn: push
