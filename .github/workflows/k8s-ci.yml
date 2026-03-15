@@ -5,6 +5,7 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
+  workflow_dispatch:
 
 jobs:
   # ──────────────────────────────────────────────────────────────
@@ -53,19 +54,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ── Write kind config to a file (required by kind-action) ──
+      # Mirrors real inventory: kube-master-1, kube-worker-1, kube-worker-2
+      - name: Write kind cluster config file
+        run: |
+          cat <<EOF > /tmp/kind-config.yaml
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+            - role: control-plane
+            - role: worker
+            - role: worker
+          EOF
+
       # ── Create kind cluster: 1 control-plane + 2 workers ──────
-      # Mirrors the real inventory: kube-master-1, kube-worker-1, kube-worker-2
       - name: Create kind cluster (1 master + 2 workers)
         uses: helm/kind-action@v1
         with:
           cluster_name: k8s-automation-ci
-          config: |
-            kind: Cluster
-            apiVersion: kind.x-k8s.io/v1alpha4
-            nodes:
-              - role: control-plane
-              - role: worker
-              - role: worker
+          config: /tmp/kind-config.yaml
 
       # ── Wait for all nodes to be Ready ────────────────────────
       - name: Wait for all cluster nodes to become Ready
@@ -178,10 +185,6 @@ jobs:
       - name: Test — kubectl cluster-info
         run: |
           kubectl cluster-info
-          echo ""
-          kubectl get componentstatuses 2>/dev/null || \
-            echo "(componentstatuses deprecated in 1.19+, skipping)"
-          echo ""
           echo "✅ Control plane is healthy"
 
       # ── Node & Pod Count Assertions ────────────────────────────
